@@ -57,6 +57,19 @@ try {
     Assert ($empty.Status -eq 200 -and $empty.Json.items.Count -eq 0 -and $empty.Json.totalCount -eq $all.Json.totalCount) 'Empty page lost totals'
     $report = Request GET '/api/reports/order-exceptions?asOfDate=2026-11-02&pageSize=200'
     Assert ($report.Status -eq 200) 'Report failed'
+    $fullReport = Request GET '/api/reports/order-exceptions?asOfDate=2026-11-02&allRows=true&pageSize=1'
+    Assert ($fullReport.Status -eq 200 -and $fullReport.Json.items.Count -eq $report.Json.totals.orderCount -and $fullReport.Json.allRows) 'Full snapshot lost detail rows'
+    Assert (($fullReport.Json.departments | Measure-Object orderCount -Sum).Sum -eq $report.Json.totals.orderCount) 'Department counts differ from totals'
+    Assert (($fullReport.Json.departments | Measure-Object quantityRemaining -Sum).Sum -eq $report.Json.totals.quantityRemaining) 'Department quantities differ from totals'
+    $openSql = Sql "SELECT COUNT(*)||','||NVL(SUM(QuantityOrdered-QuantityCompleted),0) FROM ProductionOrders WHERE QuantityCompleted < QuantityOrdered AND Status NOT IN ('Completed','Cancelled');"
+    Assert ($openSql -eq "$($report.Json.totals.openOrderCount),$($report.Json.totals.openQuantityRemaining)") 'Open totals differ from database query'
+    Assert (@($fullReport.Json.items | Where-Object { $_.daysOverdue -ne ([datetime]'2026-11-02' - [datetime]$_.dueDate).Days }).Count -eq 0) 'SQL calendar days overdue incorrect'
+    $reportFilter = Request GET '/api/reports/order-exceptions?asOfDate=2026-11-05&departmentId=2&allRows=true'
+    Assert ($reportFilter.Status -eq 200 -and @($reportFilter.Json.items | Where-Object { $_.departmentId -ne 2 }).Count -eq 0) 'Stored procedure department filter failed'
+    Assert ((Request GET '/api/reports/order-exceptions?status=Completed').Json.totals.orderCount -eq 0) 'Completed orders entered report'
+    Assert ((Request GET '/api/reports/order-exceptions?search=%25').Json.totals.orderCount -eq 0) 'Report literal search escaping failed'
+    Assert ((Request GET '/api/reports/order-exceptions?dueTo=9999-12-31').Status -eq 200) 'Report maximum inclusive date failed'
+    Assert ((Request GET '/api/orders/999999999/history').Status -eq 404) 'Missing order history should return 404'
     Assert (@($report.Json.items | Where-Object { -not $_.isOverdue -or $_.quantityRemaining -le 0 -or $_.status -in @('Completed','Cancelled') }).Count -eq 0) 'Report included a non-exception'
     $pagedReport = Request GET '/api/reports/order-exceptions?asOfDate=2026-11-02&pageSize=1'
     Assert ($pagedReport.Json.totals.orderCount -eq $report.Json.totals.orderCount) 'Report totals depend on page size'
@@ -85,6 +98,8 @@ try {
     Assert ((Request PUT '/api/orders/999999999' @{ status = 'Released' }).Status -eq 404) 'Missing update should return 404'
     $completed = Request PUT "/api/orders/$createdId" @{ quantityCompleted = 100; status = 'Completed' }
     Assert ($completed.Status -eq 200 -and $completed.Json.quantityRemaining -eq 0) 'Completion failed'
+    $history = Request GET "/api/orders/$createdId/history"
+    Assert ($history.Status -eq 200 -and $history.Json.Count -eq 3 -and $history.Json[-1].newStatus -eq 'Completed') 'History API missing completion'
     $body.productId = 999999999
     Assert ((Request POST '/api/orders' $body).Status -eq 400) 'Unknown product accepted'
     $body.productId = $products.Json[0].productId

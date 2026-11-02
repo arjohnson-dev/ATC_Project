@@ -16,6 +16,9 @@ public sealed class OrdersController(OrderRepository repository) : ControllerBas
         var order = await repository.Create(request, ct);
         return CreatedAtAction(nameof(Get), new { id = order.OrderId }, order);
     }
+    [HttpGet("{id:long:min(1)}/history")]
+    public async Task<ActionResult<List<StatusHistoryDto>>> History(long id, CancellationToken ct)
+        => await repository.History(id, ct) is { } history ? Ok(history) : NotFound();
     [HttpPut("{id:long:min(1)}")]
     public async Task<ActionResult<OrderDto>> Update(long id, UpdateOrderRequest request, CancellationToken ct)
         => await repository.Update(id, request, ct) is { } order ? Ok(order) : NotFound();
@@ -30,5 +33,6 @@ public sealed class CatalogController(OrderRepository repository) : ControllerBa
     public Task<List<ProductDto>> Products(CancellationToken ct) => repository.Products(ct);
     [HttpGet("reports/order-exceptions")]
     public Task<ExceptionReport> Exceptions([FromQuery] OrderFilter filter,
-        [FromQuery] DateOnly? asOfDate, CancellationToken ct) => repository.Exceptions(filter, asOfDate, ct);
+        [FromQuery] DateOnly? asOfDate, CancellationToken ct, [FromQuery] bool allRows = false)
+        => repository.Exceptions(filter, asOfDate, allRows, ct);
 }

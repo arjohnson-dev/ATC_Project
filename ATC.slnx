@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="Atc.Api/Atc.Api.csproj" />
+  <Project Path="Atc.Desktop/Atc.Desktop.vbproj" />
 </Solution>

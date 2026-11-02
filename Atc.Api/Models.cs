@@ -48,9 +48,13 @@ public sealed class UpdateOrderRequest : IValidatableObject
 }
 public sealed record OrderDto(long OrderId, long ProductId, string PartNumber, string Description,
     long DepartmentId, string DepartmentName, long QuantityOrdered, long QuantityCompleted,
-    DateOnly DueDate, string Status, long QuantityRemaining, bool IsOverdue);
+    DateOnly DueDate, string Status, long QuantityRemaining, bool IsOverdue, int DaysOverdue = 0);
 public sealed record DepartmentDto(long DepartmentId, string Name);
 public sealed record ProductDto(long ProductId, string PartNumber, string Description);
-public sealed record OrderTotals(long OrderCount, long QuantityOrdered, long QuantityCompleted, long QuantityRemaining);
+public sealed record OrderTotals(long OrderCount, long QuantityOrdered, long QuantityCompleted, long QuantityRemaining,
+    long OpenOrderCount = 0, long OpenQuantityRemaining = 0);
 public sealed record OrderPage(IReadOnlyList<OrderDto> Items, long TotalCount, int Page, int PageSize);
-public sealed record ExceptionReport(DateOnly AsOfDate, OrderTotals Totals, IReadOnlyList<OrderDto> Items, int Page, int PageSize);
+public sealed record DepartmentExceptionDto(long DepartmentId, string DepartmentName, long OrderCount, long QuantityRemaining);
+public sealed record ExceptionReport(DateOnly AsOfDate, OrderTotals Totals, IReadOnlyList<OrderDto> Items, int Page, int PageSize,
+    IReadOnlyList<DepartmentExceptionDto> Departments, DateTimeOffset GeneratedAt, bool AllRows);
+public sealed record StatusHistoryDto(long HistoryId, string? PreviousStatus, string NewStatus, DateTimeOffset ChangedAt);

@@ -42,7 +42,7 @@ public sealed class OrderRepository(IConfiguration configuration)
     }
 
     private static (string Sql, List<(string Name, OracleDbType Type, object? Value)> Parameters)
-        Where(OrderFilter filter, DateOnly asOf, bool exceptions)
+        Where(OrderFilter filter, DateOnly asOf)
     {
         var sql = " WHERE 1=1 ";
         var parameters = new List<(string, OracleDbType, object?)>
@@ -67,7 +67,6 @@ public sealed class OrderRepository(IConfiguration configuration)
             Add(" AND (UPPER(p.PartNumber) LIKE :search ESCAPE '\\' OR UPPER(p.Description) LIKE :search ESCAPE '\\')",
                 "search", OracleDbType.Varchar2, "%" + search + "%");
         }
-        if (exceptions) sql += " AND o.DueDate < :asOf AND o.QuantityCompleted < o.QuantityOrdered AND o.Status NOT IN ('Completed','Cancelled')";
         return (sql, parameters);
     }
 
@@ -78,22 +77,23 @@ public sealed class OrderRepository(IConfiguration configuration)
         while (await reader.ReadAsync(ct))
             result.Add(new(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2), reader.GetString(3),
                 reader.GetInt64(4), reader.GetString(5), reader.GetInt64(6), reader.GetInt64(7),
-                DateOnly.FromDateTime(reader.GetDateTime(8)), reader.GetString(9), reader.GetInt64(10), reader.GetInt32(11) == 1));
+                DateOnly.FromDateTime(reader.GetDateTime(8)), reader.GetString(9), reader.GetInt64(10), reader.GetInt32(11) == 1,
+                reader.FieldCount > 12 ? reader.GetInt32(12) : 0));
         return result;
     }
 
     private async Task<(OrderTotals Totals, List<OrderDto> Items, DateOnly AsOf)> Query(
-        OrderFilter filter, bool exceptions, DateOnly? asOf, CancellationToken ct)
+        OrderFilter filter, CancellationToken ct)
     {
         using var connection = await Open(ct);
         // Totals and paginated detail rows share one consistent Oracle snapshot.
         using (var snapshot = Command(connection, "SET TRANSACTION READ ONLY")) await snapshot.ExecuteNonQueryAsync(ct);
-        var date = asOf ?? await Today(connection, ct);
-        var (where, parameters) = Where(filter, date, exceptions);
+        var date = await Today(connection, ct);
+        var (where, parameters) = Where(filter, date);
         OrderTotals totals;
         using (var command = Command(connection,
             "SELECT COUNT(*), NVL(SUM(o.QuantityOrdered),0), NVL(SUM(o.QuantityCompleted),0), NVL(SUM(o.QuantityOrdered-o.QuantityCompleted),0)" + From + where,
-            parameters.Where(p => p.Name != "asOf" || exceptions)))
+            parameters.Where(p => p.Name != "asOf")))
         using (var reader = await command.ExecuteReaderAsync(ct))
         {
             await reader.ReadAsync(ct);
@@ -108,14 +108,69 @@ public sealed class OrderRepository(IConfiguration configuration)
 
     public async Task<OrderPage> List(OrderFilter filter, CancellationToken ct)
     {
-        var result = await Query(filter, false, null, ct);
+        var result = await Query(filter, ct);
         return new(result.Items, result.Totals.OrderCount, filter.Page, filter.PageSize);
     }
 
-    public async Task<ExceptionReport> Exceptions(OrderFilter filter, DateOnly? asOf, CancellationToken ct)
+    public async Task<ExceptionReport> Exceptions(OrderFilter filter, DateOnly? asOf, bool allRows, CancellationToken ct)
     {
-        var result = await Query(filter, true, asOf, ct);
-        return new(result.AsOf, result.Totals, result.Items, filter.Page, filter.PageSize);
+        using var connection = await Open(ct);
+        using (var snapshot = Command(connection, "SET TRANSACTION READ ONLY")) await snapshot.ExecuteNonQueryAsync(ct);
+        var date = asOf ?? await Today(connection, ct);
+        var search = string.IsNullOrWhiteSpace(filter.Search) ? null : "%" + filter.Search.Trim().ToUpperInvariant()
+            .Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+        using var command = Command(connection, "usp_GetOrderExceptions", [
+            ("p_as_of", OracleDbType.Date, date.ToDateTime(TimeOnly.MinValue)),
+            ("p_department", OracleDbType.Int64, filter.DepartmentId),
+            ("p_product", OracleDbType.Int64, filter.ProductId),
+            ("p_status", OracleDbType.Varchar2, filter.Status),
+            ("p_due_from", OracleDbType.Date, filter.DueFrom?.ToDateTime(TimeOnly.MinValue)),
+            ("p_due_to", OracleDbType.Date, filter.DueTo?.ToDateTime(TimeOnly.MinValue)),
+            ("p_search", OracleDbType.Varchar2, search),
+            ("p_offset", OracleDbType.Int64, allRows ? 0L : (long)(filter.Page-1)*filter.PageSize),
+            ("p_page_size", OracleDbType.Int32, allRows ? null : filter.PageSize)]);
+        command.CommandType = CommandType.StoredProcedure;
+        var totalsCursor = command.Parameters.Add("p_totals", OracleDbType.RefCursor, ParameterDirection.Output);
+        var departmentsCursor = command.Parameters.Add("p_departments", OracleDbType.RefCursor, ParameterDirection.Output);
+        var detailsCursor = command.Parameters.Add("p_details", OracleDbType.RefCursor, ParameterDirection.Output);
+        await command.ExecuteNonQueryAsync(ct);
+        OrderTotals totals;
+        using (var cursor = (OracleRefCursor)totalsCursor.Value)
+        using (var reader = cursor.GetDataReader())
+        {
+            await reader.ReadAsync(ct);
+            totals = new(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5));
+        }
+        var departments = new List<DepartmentExceptionDto>();
+        using (var cursor = (OracleRefCursor)departmentsCursor.Value)
+        using (var reader = cursor.GetDataReader())
+            while (await reader.ReadAsync(ct)) departments.Add(new(reader.GetInt64(0), reader.GetString(1), reader.GetInt64(2), reader.GetInt64(3)));
+        var items = new List<OrderDto>();
+        using (var cursor = (OracleRefCursor)detailsCursor.Value)
+        using (var reader = cursor.GetDataReader())
+            while (await reader.ReadAsync(ct)) items.Add(new(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2), reader.GetString(3),
+                reader.GetInt64(4), reader.GetString(5), reader.GetInt64(6), reader.GetInt64(7),
+                DateOnly.FromDateTime(reader.GetDateTime(8)), reader.GetString(9), reader.GetInt64(10), true, reader.GetInt32(12)));
+        return new(date, totals, items, allRows ? 1 : filter.Page, allRows ? items.Count : filter.PageSize,
+            departments, DateTimeOffset.UtcNow, allRows);
+    }
+
+    public async Task<List<StatusHistoryDto>?> History(long id, CancellationToken ct)
+    {
+        using var connection = await Open(ct);
+        if (await Get(connection, id, ct) is null) return null;
+        using var command = Command(connection,
+            "SELECT HistoryId,PreviousStatus,NewStatus,ChangedAt FROM OrderStatusHistory WHERE OrderId=:id ORDER BY ChangedAt,HistoryId",
+            [("id", OracleDbType.Int64, id)]);
+        using var reader = await command.ExecuteReaderAsync(ct);
+        var result = new List<StatusHistoryDto>();
+        while (await reader.ReadAsync(ct))
+        {
+            var timestamp = reader.GetOracleTimeStampTZ(3);
+            var changedAt = new DateTimeOffset(DateTime.SpecifyKind(timestamp.Value, DateTimeKind.Unspecified), timestamp.GetTimeZoneOffset());
+            result.Add(new(reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), changedAt));
+        }
+        return result;
     }
 
     private static async Task<OrderDto?> Get(OracleConnection connection, long id, CancellationToken ct)

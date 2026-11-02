@@ -43,10 +43,13 @@ These scripts have already been applied to your local database.
 - `02_mock_data.sql`: populates an empty schema in one transaction; refuses to
   seed if any table already contains rows.
 - `03_verify.sql`: shows table counts, order totals by status, and sample orders.
+- `04_exceptions_report.sql`: creates the joined report view and Oracle procedure
+  `usp_GetOrderExceptions`. Returns totals (open and overdue), overdue department
+  grouping, and detail with calendar days overdue. Already applied locally.
 
 To rebuild elsewhere, use a new empty Oracle schema with CREATE SESSION,
-CREATE TABLE, CREATE TRIGGER privileges and a tablespace quota, then run scripts
-01, 02, and 03 in order. Script 01 is intentionally not destructive or rerunnable
+CREATE TABLE, CREATE TRIGGER, CREATE VIEW, CREATE PROCEDURE privileges and a tablespace quota, then run scripts
+01, 02, 03, and 04 in order. Script 01 is intentionally not destructive or rerunnable
 over existing tables.
 
 ## Example query
