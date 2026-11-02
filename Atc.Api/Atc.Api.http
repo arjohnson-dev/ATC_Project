@@ -1,0 +1,39 @@
+@baseUrl = http://localhost:5080
+
+### Filter orders (all filters are optional)
+GET {{baseUrl}}/api/orders?departmentId=1&status=Planned&page=1&pageSize=25
+
+### Order detail
+GET {{baseUrl}}/api/orders/1
+
+### Department choices
+GET {{baseUrl}}/api/departments
+
+### Product choices
+GET {{baseUrl}}/api/products
+
+### Create; copy the returned orderId into the update request
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "departmentId": 1,
+  "quantityOrdered": 100,
+  "dueDate": "2026-11-15"
+}
+
+### Update progress/status; replace 201 with the created orderId
+PUT {{baseUrl}}/api/orders/201
+Content-Type: application/json
+
+{
+  "quantityCompleted": 25,
+  "status": "In Progress"
+}
+
+### Overdue incomplete orders; asOfDate is optional
+GET {{baseUrl}}/api/reports/order-exceptions?asOfDate=2026-11-02&page=1&pageSize=50
+
+### Development OpenAPI document
+GET {{baseUrl}}/openapi/v1.json

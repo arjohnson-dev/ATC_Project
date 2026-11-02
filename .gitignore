@@ -1,1 +1,6 @@
 database/connection.local.txt
+**/bin/
+**/obj/
+.vs/
+*.user
+test-results/
