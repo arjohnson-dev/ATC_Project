@@ -17,7 +17,13 @@ using Oracle.ManagedDataAccess.Client;
 //
 // It prepares configuration, logging, dependency injection, and hosting.
 // args contains command-line arguments passed to the application.
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    // Published EXEs load configuration beside the executable even when
+    // launched from a shortcut or a different working directory.
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 // Registers support for API controllers and configures their JSON handling.
 builder.Services.AddControllers().AddJsonOptions(options =>

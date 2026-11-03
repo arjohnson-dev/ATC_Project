@@ -83,6 +83,32 @@ production reports would need a server-side streaming export.
 Configure the desktop API address in `Atc.Desktop/appsettings.json` (copied to the
 output directory), or override it with `ATC_API_URL`. Default: `http://localhost:5080/`.
 
+### Windows executable builds
+
+To publish self-contained Windows x64 executables for both projects:
+
+```powershell
+./scripts/Publish-Windows.ps1
+```
+
+Output: `artifacts/win-x64/Frontend/Atc.Desktop.exe` and
+`artifacts/win-x64/Backend/Atc.Api.exe`. Keep the configuration files alongside
+each EXE. These builds include the .NET runtime; the target machine does not need
+the .NET SDK or a separately installed .NET runtime. Oracle is still required by
+the backend.
+
+For a local build preconfigured with this machine's Oracle credentials, use
+`./scripts/Publish-Windows.ps1 -ConfigureLocalDatabase`. This writes a password
+to the ignored output file `Backend/appsettings.Production.json`; do not share
+that file. Credentials are not embedded in the executables. For another machine,
+use the supplied example configuration or `ConnectionStrings__Oracle` instead.
+
+Start `Backend/Start-Backend.ps1`, then double-click `Frontend/Atc.Desktop.exe`.
+Stop an API already using localhost port 5080 first. The backend runs as a console
+process and is not installed as a Windows Service. The output includes its own
+README. Both projects also have a `WindowsX64` publish profile under
+`Properties/PublishProfiles` for repeatable CLI/Visual Studio publishing.
+
 ### Frontend code guide
 
 | File | Purpose |

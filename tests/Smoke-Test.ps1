@@ -1,4 +1,4 @@
-param([string]$BaseUrl = 'http://localhost:5080')
+param([string]$BaseUrl = 'http://localhost:5080', [switch]$Production)
 $ErrorActionPreference = 'Stop'
 $checks = 0
 function Assert($Condition, [string]$Message) {
@@ -108,7 +108,8 @@ try {
     $body.quantityOrdered = 100
     $body.Remove('dueDate')
     Assert ((Request POST '/api/orders' $body).Status -eq 400) 'Missing due date accepted'
-    Assert ((Request GET '/openapi/v1.json').Status -eq 200) 'OpenAPI failed'
+    $expectedOpenApiStatus = if ($Production) { 404 } else { 200 }
+    Assert ((Request GET '/openapi/v1.json').Status -eq $expectedOpenApiStatus) 'OpenAPI environment visibility incorrect'
     Write-Output "PASS: $checks integration checks."
 }
 finally {

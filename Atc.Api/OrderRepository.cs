@@ -136,7 +136,7 @@ public sealed class OrderRepository(IConfiguration configuration)
         // ExecuteScalarAsync returns the first column of the first row.
         //
         // The cast converts the result to DateTime.
-        // ! suppresses a nullable warning; it does not check for null.
+        // '!' suppresses a nullable warning; it does not check for null.
         return DateOnly.FromDateTime(
             (DateTime)(await command.ExecuteScalarAsync(ct))!);
     }
@@ -678,7 +678,7 @@ public sealed class OrderRepository(IConfiguration configuration)
         // Convert Oracle's numeric output to a C# long,
         // then retrieve the full order with its joined fields.
         //
-        // ! expresses the assumption that the inserted order is found.
+        // '!' expresses the assumption that the inserted order is found.
         var order = (await Get(
             connection,
             ((OracleDecimal)id.Value).ToInt64(),

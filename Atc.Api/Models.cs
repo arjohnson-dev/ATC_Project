@@ -147,9 +147,6 @@ public sealed class CreateOrderRequest : IValidatableObject
                 "QuantityCompleted cannot exceed QuantityOrdered.",
                 [nameof(QuantityCompleted)]);
 
-        // && means both conditions must be true.
-        // != means "not equal".
-        //
         // If the order is marked Completed, every unit must be finished.
         //
         // This rule does not require fully produced orders to have

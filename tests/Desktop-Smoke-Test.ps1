@@ -1,3 +1,4 @@
+param([string]$ExecutablePath)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $runDirectory = Join-Path $root ('test-results/desktop-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -5,7 +6,12 @@ New-Item -ItemType Directory -Path $runDirectory -Force | Out-Null
 $env:ATC_TEST_OUTPUT = $runDirectory
 $createdIdFile = Join-Path $runDirectory 'created-order-id.txt'
 try {
-    dotnet run --project (Join-Path $root 'Atc.Desktop') --no-build -- --smoke-test
+    if ($ExecutablePath) {
+        if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) { throw 'Published frontend EXE not found.' }
+        & $ExecutablePath --smoke-test | Out-Null
+    } else {
+        dotnet run --project (Join-Path $root 'Atc.Desktop') --no-build -- --smoke-test
+    }
     $testExitCode = $LASTEXITCODE
     $result = Join-Path $runDirectory 'result.txt'
     if (Test-Path -LiteralPath $result) { Get-Content -LiteralPath $result }

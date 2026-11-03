@@ -4,3 +4,5 @@ database/connection.local.txt
 .vs/
 *.user
 test-results/
+artifacts/
+**/appsettings.Local.json
